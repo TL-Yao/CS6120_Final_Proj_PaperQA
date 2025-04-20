@@ -1,0 +1,4 @@
+**/__pycache__/
+minio/data/
+.env
+volumes/
