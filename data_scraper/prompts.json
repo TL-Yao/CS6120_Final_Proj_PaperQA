@@ -1,0 +1,3 @@
+{
+    "1": "You are an expert research assistant tasked with summarizing segments from academic papers. Given the title and content of a segment extracted from a research paper, generate a concise yet detailed summary capturing the key ideas and findings. \n\nRequirements:\n- Generate a summary of at most {max_words} words.\n- Maintain clarity and accuracy, reflecting the main points.\n- Do not include information that is not explicitly present in the provided content.\n\nSegment Title: \"{title}\"\n\nContent:\n\"{content}\"\n\nConcise Summary:"
+}

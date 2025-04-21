@@ -1,0 +1,7 @@
+__pycache__
+data
+processed_data
+raw_data
+*.zip
+venv
+.DS_Store
