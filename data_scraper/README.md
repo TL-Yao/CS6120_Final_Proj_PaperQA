@@ -2,6 +2,12 @@
 
 This module provides a pipeline to **download academic papers from arXiv**, **extract and process PDF content**, **split the content into manageable logic-based chunks using Grobid**, and **generate concise summaries using LLMs** (such as Gemini).
 
+## Processed Dataset
+
+Below is a sample dataset that we scraped from arXiv and processed using this pipeline. It contains papers related to computer science and machine learning published between November 2024 and April 2025.
+
+[Download the dataset](https://drive.google.com/file/d/1ZOOySvXF4yVDVrB6C6Rj5GbNcxNOeKKV/view?usp=sharing)
+
 ## Features
 
 - **Scraping**: Automatically fetches both metadata and full-text PDFs from arXiv using search queries.
@@ -35,7 +41,7 @@ This module provides a pipeline to **download academic papers from arXiv**, **ex
    ```bash
    python summarizer.py
    ```
-   This script reads from `RAW_DATA_PATH`, summarizes any chunk or abstract longer than `SUMMARIZER_MAX_SUMMARY_WORD`, and saves the final processed results into `PROCESSED_DATA_PATH`.
+   This script reads from `RAW_DATA_PATH`, summarizes any chunk or abstract longer than `SUMMARIZER_MAX_SUMMARY_WORD` using LLM, based on prompts from `prompts.json`, and saves the final processed results into `PROCESSED_DATA_PATH`.
 
 4. **Clean up raw data**
    Once all steps complete without errors, `RAW_DATA_PATH` can be safely deleted.
@@ -43,4 +49,5 @@ This module provides a pipeline to **download academic papers from arXiv**, **ex
 
 ## Output Structure
 Raw files: stored under `RAW_DATA_PATH`
+
 Processed summaries: stored under   `PROCESSED_DATA_PATH`
