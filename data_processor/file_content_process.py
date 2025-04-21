@@ -40,7 +40,8 @@ def process_summarization(summarization: str, paper_id: int, arxiv_id: str):
         print(f"Error parsing summarization: {e}")
         return
     
-    for chunk in json_summar['chunks']:
+    chunks = json_summar['chunks'] if type(json_summar) == dict else json_summar
+    for chunk in chunks:
         chunk_file = f"{arxiv_id}/{chunk['chunk_file']}"
         summaries = chunk['summaries']
         for summary in summaries:

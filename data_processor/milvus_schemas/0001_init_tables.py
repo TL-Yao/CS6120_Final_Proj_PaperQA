@@ -64,7 +64,7 @@ def init_milvus_collections():
         FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=500),
         FieldSchema(name="published", dtype=DataType.VARCHAR, max_length=50),
         FieldSchema(name="updated", dtype=DataType.VARCHAR, max_length=50),
-        FieldSchema(name="authors", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=200, max_length=30),
+        FieldSchema(name="authors", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=500, max_length=100),
         FieldSchema(name="pdf_url", dtype=DataType.VARCHAR, max_length=200),
         FieldSchema(name="paper_summary_emb", dtype=DataType.FLOAT_VECTOR, dim=768),
     ]
@@ -73,7 +73,7 @@ def init_milvus_collections():
     # define chunk_summaries schema
     chunk_summaries_fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-        FieldSchema(name="prompt", dtype=DataType.VARCHAR, max_length=1000),
+        FieldSchema(name="prompt", dtype=DataType.VARCHAR, max_length=100),
         FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=5000),
         FieldSchema(name="chunk_file", dtype=DataType.VARCHAR, max_length=200),
         FieldSchema(name="paper_id", dtype=DataType.INT64),

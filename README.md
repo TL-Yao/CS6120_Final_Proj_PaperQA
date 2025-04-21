@@ -25,6 +25,7 @@ POSTGRES_DB=postgres
 ```
 
 1. Create .env file and ensure all required configurations are set correctly
+   1. If you are using different `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` or `MILVUS_BUCKET_NAME`, please also update value in `milvus.yaml`
 2. Run `docker-compose up -d --build` to start all containers
 3. Download processed paper data from {placeholder} or start crawler to fetch paper data
 4. Place processed paper data into `MINIO_PAPER_DATA_BUCKET`
@@ -96,7 +97,7 @@ prompts.json              # prompts we used to generate summary
 
 ```json
 {
-  "chunks": [
+  [
     {
       "chunk_file": "",
       "summaries": [
