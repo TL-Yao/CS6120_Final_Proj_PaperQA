@@ -98,6 +98,31 @@ services:
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
 
+  backend:
+    container_name: backend
+    build:
+      context: .
+      dockerfile: DockerFiles/backend/flask.Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - default
+
 networks:
   default:
     name: project
