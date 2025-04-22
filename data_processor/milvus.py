@@ -90,6 +90,15 @@ def insert_paper_summary(prompt: str, content: str, chunk_file: str, paper_id: i
     finally:
         client.release_collection(collection_name="chunk_summaries")
 
+def check_paper_summary_exists(paper_id: int, chunk_file: str) -> bool:
+    try:
+        client = get_client(["chunk_summaries"])
+        query_result = client.query(collection_name="chunk_summaries", filter=f"paper_id == {paper_id} and chunk_file == '{chunk_file}'", output_fields=["paper_id", "chunk_file"])
+        return len(query_result) > 0
+    except Exception as e:
+        logger.error(f"fail when checking paper summary exists, error: {str(e)}", exc_info=True)
+        return False
+
 def query_paper_by_id(paper_id: int) -> list[str]:
     try:
         client = get_client(["paper_metadata"])

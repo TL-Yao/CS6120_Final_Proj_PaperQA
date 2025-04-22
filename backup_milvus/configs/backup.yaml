@@ -1,0 +1,42 @@
+backup:
+  gcPause:
+    address: http://milvus:19530
+    enable: true
+    seconds: 7200
+  keepTempFiles: false
+  maxSegmentGroupSize: 2G
+  parallelism:
+    backupCollection: 4
+    copydata: 128
+    restoreCollection: 2
+http:
+  simpleResponse: true
+log:
+  console: true
+  file:
+    rootPath: logs/backup.log
+  level: info
+milvus:
+  address: milvus
+  caCertPath: ''
+  mtlsCertPath: ''
+  mtlsKeyPath: ''
+  port: 19530
+  rpcChannelName: by-dev-replicate-msg
+  serverName: ''
+  tlsMode: 0
+minio:
+  accessKeyID: Test12345
+  address: minio
+  backupRootPath: backup
+  backupStorageType: local
+  backupUseSSL: false
+  bucketName: milvus
+  crossStorage: 'false'
+  iamEndpoint: ''
+  port: 9000
+  rootPath: files
+  secretAccessKey: Test12345
+  storageType: minio
+  useIAM: false
+  useSSL: false

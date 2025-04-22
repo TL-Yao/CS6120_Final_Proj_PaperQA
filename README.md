@@ -2,11 +2,13 @@
 
 ### Sample Env
 ```
+MINIO_HOST_NAME=minio
+MINIO_PORT=9000
 MINIO_ENDPOINT=http://minio:9000
 MINIO_HTTP_SECURE=False
 MINIO_ACCESS_KEY=Test12345
 MINIO_SECRET_KEY=Test12345
-MINIO_PAPER_DATA_BUCKET=paper-data-bucket
+PAPER_DATA_ROOT_PATH=/app/paper_data
 MINIO_PROCESSED_DATA_BUCKET=processed-bucket
 
 # milvus
@@ -24,22 +26,27 @@ POSTGRES_PASSWORD=Test12345
 POSTGRES_DB=postgres
 ```
 
-1. Create .env file and ensure all required configurations are set correctly
-   1. If you are using different `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` or `MILVUS_BUCKET_NAME`, please also update value in `milvus.yaml`
-2. Run `docker-compose up -d --build` to start all containers
-3. Download processed paper data from {placeholder} or start crawler to fetch paper data
-4. Place processed paper data into `MINIO_PAPER_DATA_BUCKET`
-5. Enter container using `docker exec -it data_processor bash`, run `bash data_processor/process_paper_data.sh` until all papers are inserted into milvus database.
+Create a .env file and ensure all required configurations are set correctly.
+
+> **Warning**
+> 
+> If you are using different `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` or `MILVUS_BUCKET_NAME`, please also update the values in `milvus.yaml`
+
+### Fetch Paper Data
+#### Download Processed Paper Data
+1. Download and unzip processed paper data from {placeholder} or start the crawler to fetch paper data
+2. Place folders containing paper data into `processed_data`
+3. Start the container and run `bash /app/data_processor/process_paper_data.sh` to embed and insert data into the vector database.
+
+#### Recovery From Backup Milvus Data
+1. Download and unzip backup Milvus data from {placeholder}
+2. Place the folder under `backup_milvus`
+3. Get into container bash using `docker exec -it data_processor bash`
+4. `cd backup_milvus` and run `python backup.py --mode restore`
 
 ## Data Processor Service
-This service performs vectorization on processed paper texts and user queries, and retrieves the most relevant content from the vector database based on the user’s query.
+This service performs vectorization on processed paper texts and user queries, and retrieves the most relevant content from the vector database based on the user's query.
 
-### Script
-```
-bash data_processor/process_paper_data.sh
-```
-
-This script reads pre-processed paper data from S3, performs vectorization, stores the resulting vectors in a Milvus database, and saves the original text back to S3.
 
 ### APIs
 GET: /query

@@ -1,16 +1,21 @@
 from flask import Flask, jsonify, request
 from config import Config
-from boto3_actions import get_first_folder, get_file_content, cp_file, delete_folder
+from boto3_actions import get_first_folder_os, get_file_content_os, upload_file, delete_file_os
 from logger_config import setup_logger
-from embedding import embed_query
+from embedding import init_embedding_model, embed_query
 from milvus import query_relative_chunks, query_paper_by_id
 import re
 from file_content_process import process_summarization, process_metadata
 from utils import confidence_to_distance, distance_to_confidence
+import os
+
 app = Flask(__name__)
 app.config.from_object(Config)
 
 logger = setup_logger(__name__)
+
+# init embedding model
+init_embedding_model()
 
 @app.route('/health')
 def health():
@@ -19,42 +24,42 @@ def health():
 @app.route('/embedding_file')
 def embedding_file():
     try:
-        arxiv_id, files_info = get_first_folder(app.config.get('MINIO_PAPER_DATA_BUCKET'))
+        arxiv_id, file_paths = get_first_folder_os(app.config.get('PAPER_DATA_ROOT_PATH'))
         if not arxiv_id:
             return jsonify({'error': 'no folder found in bucket'}), 404
 
         metadata_obj_key = None
         summarization_obj_key = None
-        chunk_obj_keys = []
+        chunk_file_paths = []
 
-            # get metadata, summarization and chunk file object keys
-        for file_info in files_info:
-            if "metadata.json" in file_info['object_key']:
-                metadata_obj_key = file_info['object_key']
-            elif "summarization.json" in file_info['object_key']:
-                summarization_obj_key = file_info['object_key']
-            elif re.match(r'.*/chunk_\d+\.txt', file_info['object_key']):
-                chunk_obj_keys.append(file_info['object_key'])
+        # get metadata, summarization and chunk file object keys
+        for file_path in file_paths:
+            if "metadata.json" in file_path:
+                metadata_obj_key = file_path
+            elif "summarization.json" in file_path:
+                summarization_obj_key = file_path
+            elif re.match(r'.*/chunk_\d+\.txt', file_path):
+                chunk_file_paths.append(file_path)
             else:
-                print(f"Unknown file: {file_info['object_key']}")
+                print(f"Unknown file: {file_path}")
 
         # process metadata information
-        metadata = get_file_content(metadata_obj_key, app.config.get('MINIO_PAPER_DATA_BUCKET'))
+        metadata = get_file_content_os(metadata_obj_key)
         paper_id = process_metadata(metadata)
         if not paper_id:
             logger.error(f"failed to process metadata for arxiv_id: {arxiv_id}")
             return jsonify({'error': 'failed to process metadata'}), 500
 
         # process summarization information
-        summarization = get_file_content(summarization_obj_key, app.config.get('MINIO_PAPER_DATA_BUCKET'))
+        summarization = get_file_content_os(summarization_obj_key)
         process_summarization(summarization, paper_id, arxiv_id)
 
         # copy chunks to processed bucket
-        for chunk_obj_key in chunk_obj_keys:
-            cp_file(chunk_obj_key, app.config.get('MINIO_PAPER_DATA_BUCKET'), app.config.get('MINIO_PROCESSED_DATA_BUCKET'))
+        for chunk_file_path in chunk_file_paths:
+            upload_file(chunk_file_path, app.config.get('MINIO_PROCESSED_DATA_BUCKET'), arxiv_id)
 
         # delete processed folder from paper data bucket
-        delete_folder(app.config.get('MINIO_PAPER_DATA_BUCKET'), arxiv_id)
+        delete_file_os(os.path.join(app.config.get('PAPER_DATA_ROOT_PATH'), arxiv_id))
 
     except Exception as e:
         logger.error(f"error: {str(e)}", exc_info=True)

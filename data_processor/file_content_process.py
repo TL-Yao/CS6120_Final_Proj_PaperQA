@@ -1,5 +1,5 @@
 from embedding import embed_passage
-from milvus import insert_paper_metadata, insert_paper_summary
+from milvus import insert_paper_metadata, insert_paper_summary, check_paper_summary_exists
 import json
 from logger_config import setup_logger
 
@@ -41,9 +41,13 @@ def process_summarization(summarization: str, paper_id: int, arxiv_id: str):
         return
     
     chunks = json_summar['chunks'] if type(json_summar) == dict else json_summar
+
     for chunk in chunks:
         chunk_file = f"{arxiv_id}/{chunk['chunk_file']}"
         summaries = chunk['summaries']
+        if check_paper_summary_exists(paper_id, chunk_file):
+            logger.info(f"paper summary with paper_id {paper_id} and chunk_file {chunk_file} already exists in database")
+            continue
         for summary in summaries:
             prompt = summary['prompt']
             content = summary['content']

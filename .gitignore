@@ -2,3 +2,7 @@
 minio/data/
 .env
 volumes/
+paper_data/*
+!paper_data/.gitkeep
+backup_milvus/backup
+backup_milvus/logs
