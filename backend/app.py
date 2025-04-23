@@ -4,12 +4,13 @@ import requests
 import uuid
 from datetime import datetime
 from flask import render_template
+import os
 
 app = flask.Flask(__name__)
 
 # --- Configuration ---------------------------------------------------------
-VECTOR_DB_API = "http://vector_dp_url/query"  # <- change to your actual host
-LLM_ENDPOINT  = "http://localhost:8000/generate"  # <- local LLM HTTP endpoint
+QUERY_API = f"{os.getenv('DP_HOST')}:{os.getenv('DP_PORT')}/query"
+LLM_ENDPOINT  = os.getenv('LLM_ENDPOINT')
 TOP_K_DEFAULT = 5
 CONFIDENCE_DEFAULT = 0.0
 
@@ -22,11 +23,11 @@ def index():
 
 def connect_to_db():
     return psycopg2.connect(
-        host="postgres",  # service name in docker-compose or hostname
-        database="dialog",
-        user="user",
-        password="password",
-        port="5432"
+        host=os.getenv("POSTGRES_HOST"),
+        database=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+        port=os.getenv("POSTGRES_PORT")
     )
 
 
@@ -73,7 +74,7 @@ def get_prompt(conn, current_query: str, conversation_history=None, *, top_k=TOP
     # 2. Fetch extra context from vector store ---------------------------------
     try:
         vect_resp = requests.post(
-            VECTOR_DB_API,
+            QUERY_API,
             json={"query": full_query, "top_k": top_k, "confidence": confidence},
             timeout=60
         )
@@ -243,4 +244,4 @@ def backend_chat():
 if __name__ == "__main__":
     with connect_to_db() as conn:
         create_table(conn)
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)

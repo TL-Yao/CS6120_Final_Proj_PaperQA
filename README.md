@@ -21,9 +21,18 @@ MILVUS_PORT=19530
 # postgres
 TZ=America/Los_Angeles
 PGTZ=America/Los_Angeles
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
 POSTGRES_USER=root
 POSTGRES_PASSWORD=Test12345
 POSTGRES_DB=postgres
+
+# data_processor
+DP_HOST=data_processor
+DP_PORT=8000
+
+# endpoint to your LLM interface
+LLM_ENDPOINT=
 ```
 
 Create a .env file and ensure all required configurations are set correctly.
