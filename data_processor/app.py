@@ -72,22 +72,28 @@ def query():
     # read query parameters from request
     query_params = request.args
     query_text = query_params.get('query')
-    top_k = query_params.get('top_k', 5)
-    confidence_threshold = query_params.get('confidence_threshold', 0.5)
+    k = query_params.get('k')
+    confidence = query_params.get('confidence', 0.5)
 
     # validate query parameters
     if not query_text:
         logger.error(f"query text is required")
         return jsonify({'error': 'query text is required'}), 400
     
-    if not top_k:
-        logger.error(f"top_k is required")
-        return jsonify({'error': 'top_k is required'}), 400
+    if not k:
+        logger.error(f"k is required")
+        return jsonify({'error': 'k is required'}), 400
+    
+    try:
+        k = int(k)
+    except ValueError:
+        logger.error(f"k must be an integer")
+        return jsonify({'error': 'k must be an integer'}), 400
     
     # query milvus
     query_embeddings = embed_query(query_text)
-    distance_threshold = confidence_to_distance(float(confidence_threshold))
-    relative_chunks = query_relative_chunks(query_embeddings.tolist(), top_k, distance_threshold)
+    distance_threshold = confidence_to_distance(float(confidence))
+    relative_chunks = query_relative_chunks(query_embeddings.tolist(), k, distance_threshold)
 
     if not relative_chunks:
         logger.error(f"no relative chunks found")

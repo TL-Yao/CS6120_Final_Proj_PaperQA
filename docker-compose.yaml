@@ -109,6 +109,8 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/app
+      - ./backend/static:/app/static
+      - ./backend/templates:/app/templates
     depends_on:
       postgres:
         condition: service_healthy

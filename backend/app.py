@@ -1,255 +1,246 @@
 import psycopg2
 import flask
 import requests
-import json
 import uuid
 from datetime import datetime
+from flask import render_template
 
 app = flask.Flask(__name__)
-VECTOR_DB_API = "vector_dp_url/query"
+
+# --- Configuration ---------------------------------------------------------
+VECTOR_DB_API = "http://vector_dp_url/query"  # <- change to your actual host
+LLM_ENDPOINT  = "http://localhost:8000/generate"  # <- local LLM HTTP endpoint
+TOP_K_DEFAULT = 5
+CONFIDENCE_DEFAULT = 0.0
+
+# --- Frontend Route --------------------------------------------------------
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+# --- Database helpers ------------------------------------------------------
 
 def connect_to_db():
-    conn = psycopg2.connect(
-        host="postgres",
+    return psycopg2.connect(
+        host="postgres",  # service name in docker-compose or hostname
         database="dialog",
         user="user",
         password="password",
         port="5432"
     )
-    return conn
+
 
 def create_table(conn):
-    cursor = conn.cursor()
-    cursor.execute("""
+    cur = conn.cursor()
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS sessions (
-            session_id VARCHAR(255) PRIMARY KEY,
+            session_id   VARCHAR(255) PRIMARY KEY,
             session_name VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    """)
-    cursor.execute("""
+        """
+    )
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
+            id         SERIAL PRIMARY KEY,
             session_id VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL,
-            content TEXT NOT NULL,
+            role       VARCHAR(50) NOT NULL,
+            content    TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES sessions(session_id)
         )
-    """)
+        """
+    )
     conn.commit()
 
-def insert_dialog(conn, user_id, context):
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO dialog (user_id, context) VALUES (%s, %s)
-    """, (user_id, context))
-    conn.commit()
+# --- Prompt helper ---------------------------------------------------------
 
-
-def get_dialog(conn, user_id):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT context FROM dialog WHERE user_id = %s
-    """, (user_id,))
-    return cursor.fetchone()
-
-def update_dialog(conn, user_id, context):
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE dialog SET context = %s WHERE user_id = %s
-    """, (context, user_id))
-    conn.commit()   
-
-def delete_dialog(conn, user_id):
-    cursor = conn.cursor()
-    cursor.execute("""
-        DELETE FROM dialog WHERE user_id = %s
-    """, (user_id,))
-    conn.commit()
-
-
-
-def get_prompt(conn, user_id, conversation_history=None, top_k=5, confidence=0.0):
+def get_prompt(conn, current_query: str, conversation_history=None, *, top_k=TOP_K_DEFAULT, confidence=CONFIDENCE_DEFAULT):
+    """Build an LLM prompt by enriching the user query with vector-DB context."""
     if conversation_history is None:
         conversation_history = []
-    
-    # Format the conversation history
-    history_text = "\n".join([
-        f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
-        for msg in conversation_history
-    ])
-    
-    # Combine history with current query
-    full_query = f"{history_text}\n\nCurrent Query: {user_id}"
-    
-    params = {
-        "query": full_query,
-        "top_k": top_k,
-        "confidence": confidence
-    }
+
+    # 1. Format dialogue history ------------------------------------------------
+    history_text = "\n".join(
+        f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}" for msg in conversation_history
+    )
+
+    full_query = f"{history_text}\n\nCurrent Query: {current_query}" if history_text else current_query
+
+    # 2. Fetch extra context from vector store ---------------------------------
     try:
-        response = requests.post(VECTOR_DB_API, params=params)
-        results = response.json()
-        
-        with open('template.txt', 'r') as f:
-            template = f.read()
-            
-        prompt = template.replace("{{user_query}}", full_query)
-        
-        papers_section = ""
-        for paper in results.get('papers', []):
-            papers_section += f"- Title: {paper.get('metadata', {}).get('title', 'N/A')}\n"
-            papers_section += f"  ArXiv ID: {paper.get('metadata', {}).get('arxiv_id', 'N/A')}\n"
-            papers_section += f"  URL: {paper.get('metadata', {}).get('url', 'N/A')}\n"
-            papers_section += f"  Confidence Score: {paper.get('confidence', 0.0)}\n"
-            papers_section += f"  Summary: {paper.get('content', 'N/A')}\n\n"
-            
-        prompt = prompt.replace("{% for paper in papers %}\n{% endfor %}", papers_section)
-        return prompt
+        vect_resp = requests.post(
+            VECTOR_DB_API,
+            json={"query": full_query, "top_k": top_k, "confidence": confidence},
+            timeout=60
+        )
+        vect_resp.raise_for_status()
+        results = vect_resp.json()
+    except Exception as exc:
+        raise RuntimeError(f"Vector-DB request failed → {exc}") from exc
 
-    except Exception as e:
-        return f"Error: {str(e)}"
+    # 3. Load Jinja-style template --------------------------------------------
+    with open("template.txt", "r", encoding="utf-8") as f:
+        template = f.read()
 
-@app.route('/health')
+    prompt = template.replace("{{user_query}}", full_query)
+
+    # 4. Inject papers section --------------------------------------------------
+    papers_block = ""
+    for paper in results.get("papers", []):
+        meta = paper.get("metadata", {})
+        papers_block += (
+            f"- Title: {meta.get('title', 'N/A')}\n"
+            f"  ArXiv ID: {meta.get('arxiv_id', 'N/A')}\n"
+            f"  URL: {meta.get('url', 'N/A')}\n"
+            f"  Confidence Score: {paper.get('confidence', 0.0)}\n"
+            f"  Summary: {paper.get('content', 'N/A')}\n\n"
+        )
+
+    prompt = prompt.replace(r"{% for paper in papers %}\n{% endfor %}", papers_block)
+    return prompt
+
+# ---------------------------------------------------------------------------
+#                                  ROUTES                                   
+# ---------------------------------------------------------------------------
+
+@app.route("/health")
 def health_check():
     return "OK"
 
-@app.route('/deepseek_backend/create_session', methods=['POST'])
-def create_session():
-    data = flask.request.get_json()
-    session_name = data.get('session_name', 'New Chat')
-    session_id = str(uuid.uuid4())
-    
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO sessions (session_id, session_name)
-        VALUES (%s, %s)
-    """, (session_id, session_name))
-    conn.commit()
-    conn.close()
-    
-    return flask.jsonify({
-        'session_id': session_id,
-        'session_name': session_name
-    })
+# ----------------------------- Session CRUD --------------------------------
 
-@app.route('/deepseek_backend/get_session')
+@app.route("/deepseek_backend/create_session", methods=["POST"])
+def create_session():
+    data = flask.request.get_json(force=True)
+    session_name = data.get("session_name", "New Chat")
+    session_id = str(uuid.uuid4())
+
+    conn, cur = connect_to_db(), None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO sessions (session_id, session_name) VALUES (%s, %s)",
+            (session_id, session_name),
+        )
+        conn.commit()
+    finally:
+        if conn:
+            conn.close()
+
+    return flask.jsonify({"session_id": session_id, "session_name": session_name})
+
+
+@app.route("/deepseek_backend/get_session")
 def get_sessions():
     conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT session_id, session_name 
-        FROM sessions 
-        ORDER BY updated_at DESC
-    """)
-    sessions = [{'session_id': row[0], 'session_name': row[1]} for row in cursor.fetchall()]
+    cur = conn.cursor()
+    cur.execute("SELECT session_id, session_name FROM sessions ORDER BY updated_at DESC")
+    sessions = [{"session_id": s, "session_name": n} for s, n in cur.fetchall()]
     conn.close()
     return flask.jsonify(sessions)
 
-@app.route('/deepseek_backend/delete_session', methods=['POST'])
+
+@app.route("/deepseek_backend/delete_session", methods=["POST"])
 def delete_session():
-    data = flask.request.get_json()
-    session_id = data.get('session_id')
-    
+    session_id = flask.request.get_json(force=True).get("session_id")
     conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM messages WHERE session_id = %s", (session_id,))
-    cursor.execute("DELETE FROM sessions WHERE session_id = %s", (session_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM messages WHERE session_id = %s", (session_id,))
+    cur.execute("DELETE FROM sessions WHERE session_id = %s", (session_id,))
     conn.commit()
     conn.close()
-    
-    return flask.jsonify({'status': 'success'})
+    return flask.jsonify({"status": "success"})
 
-@app.route('/deepseek_backend/load_chat/<session_id>')
+
+@app.route("/deepseek_backend/load_chat/<session_id>")
 def load_chat(session_id):
     conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT role, content 
-        FROM messages 
-        WHERE session_id = %s 
-        ORDER BY created_at ASC
-    """, (session_id,))
-    messages = [{'role': row[0], 'content': row[1]} for row in cursor.fetchall()]
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT role, content FROM messages WHERE session_id = %s ORDER BY created_at ASC",
+        (session_id,),
+    )
+    msgs = [{"role": r, "content": c} for r, c in cur.fetchall()]
     conn.close()
-    return flask.jsonify(messages)
+    return flask.jsonify(msgs)
 
-@app.route('/deepseek_backend/save_chat', methods=['POST'])
+
+@app.route("/deepseek_backend/save_chat", methods=["POST"])
 def save_chat():
-    data = flask.request.get_json()
-    session_id = data.get('session_id')
-    user_message = data.get('user')
-    assistant_message = data.get('assistant')
-    
+    data = flask.request.get_json(force=True)
+    session_id = data["session_id"]
+    user_msg    = data.get("user")
+    asst_msg    = data.get("assistant")
+
     conn = connect_to_db()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        UPDATE sessions 
-        SET updated_at = CURRENT_TIMESTAMP 
-        WHERE session_id = %s
-    """, (session_id,))
-    
-    cursor.execute("""
-        INSERT INTO messages (session_id, role, content)
-        VALUES (%s, %s, %s)
-    """, (session_id, 'user', user_message))
-    
-    cursor.execute("""
-        INSERT INTO messages (session_id, role, content)
-        VALUES (%s, %s, %s)
-    """, (session_id, 'assistant', assistant_message))
-    
+    cur = conn.cursor()
+    cur.execute("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = %s", (session_id,))
+    cur.execute("INSERT INTO messages (session_id, role, content) VALUES (%s,'user',%s)", (session_id, user_msg))
+    cur.execute("INSERT INTO messages (session_id, role, content) VALUES (%s,'assistant',%s)", (session_id, asst_msg))
     conn.commit()
     conn.close()
-    return flask.jsonify({'status': 'success'})
+    return flask.jsonify({"status": "success"})
 
-@app.route('/deepseek/api/chat', methods=['POST'])
-def chat():
-    data = flask.request.get_json()
-    messages = data.get('messages', [])
-    
-    # Get the last user message
-    user_message = next((msg['content'] for msg in reversed(messages) if msg['role'] == 'user'), None)
-    if not user_message:
-        return flask.jsonify({'error': 'No user message found'}), 400
-    
-    # Get the last 10 messages for context
-    conversation_history = messages[-10:] if len(messages) > 10 else messages
-    
+# ---------------------------  NEW CHAT ENDPOINT  ---------------------------
+
+@app.route("/deepseek_backend/chat", methods=["POST"])
+def backend_chat():
+    """Single endpoint that: 1) builds a prompt with extra context, 2) calls the local LLM, 3) stores the Q&A."""
+    data = flask.request.get_json(force=True)
+
+    session_id = data.get("session_id")  # may be null for ad-hoc chats
+    query      = data.get("query")
+    history    = data.get("messages")  # optional - fallback to DB
+
+    if not query:
+        return flask.jsonify({"error": "'query' field is required"}), 400
+
     conn = connect_to_db()
+
+    # If history not supplied, pull the last 10 messages for context
+    if history is None and session_id:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT role, content FROM messages
+                WHERE session_id = %s ORDER BY created_at DESC LIMIT 10""",
+            (session_id,),
+        )
+        history = [{"role": r, "content": c} for r, c in cur.fetchall()][::-1]  # chronological
+
+    # 1. Build the prompt -----------------------------------------------------
     try:
-        response = get_prompt(conn, user_message, conversation_history)
-        
-        return flask.jsonify({
-            'message': {
-                'content': response
-            }
-        })
-    except Exception as e:
-        return flask.jsonify({'error': str(e)}), 500
-    finally:
+        prompt = get_prompt(conn, query, history)
+    except Exception as exc:
         conn.close()
+        return flask.jsonify({"error": str(exc)}), 500
 
-@app.route('/deepseek/api/generate', methods=['POST'])
-def generate():
-    data = flask.request.get_json()
-    prompt = data.get('prompt', '')
-    
-    conn = connect_to_db()
+    # 2. Call local LLM -------------------------------------------------------
     try:
-        response = get_prompt(conn, prompt)
-        return flask.jsonify({'response': response})
-    except Exception as e:
-        return flask.jsonify({'error': str(e)}), 500
-    finally:
+        llm_resp = requests.post(LLM_ENDPOINT, json={"prompt": prompt}, timeout=120)
+        llm_resp.raise_for_status()
+        asst_text = llm_resp.json().get("response") or llm_resp.text
+    except Exception as exc:
         conn.close()
+        return flask.jsonify({"error": f"LLM call failed → {exc}"}), 502
 
-if __name__ == '__main__':
-    conn = connect_to_db()
-    create_table(conn)
+    # 3. Persist messages -----------------------------------------------------
+    if session_id:
+        cur = conn.cursor()
+        cur.execute("UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = %s", (session_id,))
+        cur.execute("INSERT INTO messages (session_id, role, content) VALUES (%s,'user',%s)", (session_id, query))
+        cur.execute("INSERT INTO messages (session_id, role, content) VALUES (%s,'assistant',%s)", (session_id, asst_text))
+        conn.commit()
+
     conn.close()
-    app.run(host='0.0.0.0', port=5000)
+    return flask.jsonify({"message": {"content": asst_text}})
+
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    with connect_to_db() as conn:
+        create_table(conn)
+    app.run(host="0.0.0.0", port=5000, debug=False)
