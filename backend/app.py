@@ -241,6 +241,6 @@ def backend_chat():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # with connect_to_db() as conn:
-    #     create_table(conn)
+    with connect_to_db() as conn:
+        create_table(conn)
     app.run(host="0.0.0.0", port=5000, debug=False)
