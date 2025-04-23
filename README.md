@@ -36,12 +36,12 @@ Create a .env file and ensure all required configurations are set correctly.
 #### Download Processed Paper Data
 1. Download and unzip processed paper data from {placeholder} or start the crawler to fetch paper data
 2. Place folders containing paper data into `processed_data`
-3. Start the container and run `bash /app/data_processor/process_paper_data.sh` to embed and insert data into the vector database.
+3. Start the container `docker compose up -d --build` and run `bash /app/data_processor/process_paper_data.sh` to embed and insert data into the vector database.
 
 #### Recovery From Backup Milvus Data
 1. Download and unzip backup Milvus backup data from [here](https://drive.google.com/file/d/1ctMSo7utaky67cx7cp2J345VzwYYi8rZ/view?usp=sharing)
 2. Place the `backup` folder under `backup_milvus`
-3. Get into container bash using `docker exec -it data_processor bash`
+3. Start the container `docker compose up -d --build` and Get into container bash using `docker exec -it data_processor bash`
 4. `cd backup_milvus` and run `python backup.py --mode restore`
 
 ## Data Processor Service

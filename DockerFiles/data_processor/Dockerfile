@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.9
 
 WORKDIR /app
 
@@ -9,8 +9,7 @@ RUN apt-get update && \
     mv mc /usr/local/bin/
 
 # install dependencies
-COPY ./requirements.txt requirements.txt
-
+COPY ./data_processor/requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
 # copy entrypoint
