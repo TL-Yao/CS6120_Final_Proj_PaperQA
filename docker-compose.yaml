@@ -44,8 +44,6 @@ services:
       - "80:8501"
     volumes:
       - ./backend:/app
-    depends_on:
-      - "postgres"
 
   etcd:
     container_name: milvus-etcd
@@ -98,17 +96,6 @@ services:
       -  "7654:3000"
     depends_on:
       - "milvus"
-
-  postgres:
-    image: postgres:14
-    container_name: postgres
-    restart: always
-    env_file:
-      - .env
-    ports:
-      - "15432:5432"
-    volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
 
 networks:
   default:

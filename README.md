@@ -1,6 +1,15 @@
-## User Guidance
+# Ask the Paper: An LLM-Based Assistant for Academic Papers
 
-### Sample Env
+## Live Demo Link
+http://34.122.121.114:80
+
+## Installation Guide
+### Requirements
+- Docker and Docker-Compose
+- Ollama with running llama3, for more information, check [Ollama Installation Guide](https://ollama.com/download/mac) and [llama3 on Ollama](https://ollama.com/library/llama3)
+- Create a `.env` file on the under `CS6120_FINAL_PROJ_PAPERQA` folder according to the instructions below
+
+### Sample Dot Env
 ```
 MINIO_HOST_NAME=minio
 MINIO_PORT=9000
@@ -32,32 +41,56 @@ DP_HOST=data_processor
 DP_PORT=8000
 
 # endpoint to your LLM interface
-LLM_ENDPOINT=
+LLM_ENDPOINT=http://localhost:11434/api/generate
 ```
-
-Create a .env file and ensure all required configurations are set correctly.
+- LLM_ENDPOINT is an Ollama API endpoint, example: `http://localhost:11434/api/generate`
+- Create a .env file in the working directory and ensure all required configurations are set correctly.
 
 > **Warning**
 > 
 > If you are using different `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` or `MILVUS_BUCKET_NAME`, please also update the values in `milvus.yaml`
 
-### Fetch Paper Data
-#### Download Processed Paper Data
-1. Download and unzip processed paper data from {placeholder} or start the crawler to fetch paper data
-2. Place folders containing paper data into `processed_data`
-3. Start the container `docker compose up -d --build` and run `bash /app/data_processor/process_paper_data.sh` to embed and insert data into the vector database.
+### Build Docker Images and Start Your Docker Containers
 
-#### Recovery From Backup Milvus Data
-1. Download and unzip backup Milvus backup data from [here](https://drive.google.com/file/d/1ctMSo7utaky67cx7cp2J345VzwYYi8rZ/view?usp=sharing)
+Run `docker compose up --build -d`
+
+### Import Processed Paper Data
+#### Recovery From Backup Milvus Data (Recommended)
+1. Download and unzip backup Milvus backup data from [here](https://drive.google.com/drive/folders/15yJtVvoRGLHpx3mHiP2K8P1-dwL9UiKb?usp=sharing)
 2. Place the `backup` folder under `backup_milvus`
 3. Start the container `docker compose up -d --build` and Get into container bash using `docker exec -it data_processor bash`
 4. `cd backup_milvus` and run `python backup.py --mode restore`
 
-## Data Processor Service
+#### Download Original Paper Data We collected and Embeding them by Yourself
+1. Download and unzip processed paper data from [here]() or start the scraper to fetch paper data according to instructions [here](https://github.com/TL-Yao/CS6120_Final_Proj_PaperQA/blob/main/data_scraper/README.md)
+2. Place folders containing paper data into `paper_data`
+3. Start the container `docker compose up -d --build` and run `bash /app/data_processor/process_paper_data.sh` to embed and insert data into the vector database.
+
+
+## Overall Project Structure
+
+```bash
+CS6120_FINAL_PROJ_PAPERQA/
+├── backend/                 # LLM API and User Interface (Streamlit)
+├── backup_milvus/           # Backup files for Milvus vector database
+├── data_processor/          # Chunk embedding and storing to vector database
+├── data_scraper/            # Data collecting, preprocessing, and chunking pipeline
+├── DockerFiles/             # Dockerfile and container setup scripts
+├── docs/                    # Project documentation
+├── .env                     # Environment variable configuration
+├── docker-compose.yaml      # Docker Compose setup for containers deployment
+├── milvus.yaml              # Configuration file for Milvus vector DB
+├── prompts.json             # Prompt templates for chunk summarization
+├── .gitignore
+└── README.md
+```
+
+## Modules
+### Data Processor Service
 This service performs vectorization on processed paper texts and user queries, and retrieves the most relevant content from the vector database based on the user's query.
 
 
-### APIs
+#### APIs
 GET: /query
 
 Query Params：
@@ -82,11 +115,11 @@ Return:
 ]
 ```
 
-## Paper Crawler
+### Paper Scraper
 
-###  Paper Processor Output Format
+####  Paper Preprocess Output Format
 
-#### File Structure
+##### File Structure
 ```
 prompts.json              # prompts we used to generate summary
 {arxiv_id}/
@@ -97,7 +130,7 @@ prompts.json              # prompts we used to generate summary
 ├── ...                   # Additional chunks
 ```
 
-#### metadata.json
+##### metadata.json
 ```json
 {
   "arxiv_id": "",
@@ -109,7 +142,7 @@ prompts.json              # prompts we used to generate summary
 }
 ```
 
-#### summarization.json
+##### summarization.json
 
 ```json
 {
@@ -127,7 +160,7 @@ prompts.json              # prompts we used to generate summary
 }
 ```
 
-#### prompts.json
+##### prompts.json
 The prompt IDs should be incremental, and any prompt once written should not be modified or deleted. Even if a prompt is deleted, its ID should not be reused.
 ```json
 {
