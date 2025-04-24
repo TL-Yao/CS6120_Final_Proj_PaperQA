@@ -72,8 +72,8 @@ def query():
     # read query parameters from request
     query_params = request.args
     query_text = query_params.get('query')
-    top_k = query_params.get('top_k', 5)
-    confidence_threshold = query_params.get('confidence_threshold', 0.5)
+    top_k = int(query_params.get('top_k', 5))
+    confidence_threshold = float(query_params.get('confidence_threshold', 0.5))
 
     # validate query parameters
     if not query_text:

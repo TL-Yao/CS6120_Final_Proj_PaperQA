@@ -9,7 +9,7 @@ import os
 app = flask.Flask(__name__)
 
 # --- Configuration ---------------------------------------------------------
-QUERY_API = f"{os.getenv('DP_HOST')}:{os.getenv('DP_PORT')}/query"
+QUERY_API = f"http://{os.getenv('DP_HOST')}:{os.getenv('DP_PORT')}/query"
 LLM_ENDPOINT  = os.getenv('LLM_ENDPOINT')
 TOP_K_DEFAULT = 5
 CONFIDENCE_DEFAULT = 0.0
@@ -73,9 +73,9 @@ def get_prompt(conn, current_query: str, conversation_history=None, *, top_k=TOP
 
     # 2. Fetch extra context from vector store ---------------------------------
     try:
-        vect_resp = requests.post(
+        vect_resp = requests.get(
             QUERY_API,
-            json={"query": full_query, "top_k": top_k, "confidence": confidence},
+            params={"query": full_query, "top_k": top_k, "confidence_threshold": confidence},
             timeout=60
         )
         vect_resp.raise_for_status()
