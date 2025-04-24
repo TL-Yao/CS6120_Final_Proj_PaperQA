@@ -4,7 +4,7 @@ import subprocess
 import argparse
 from pymilvus import connections, Collection, DataType
 
-BACKUP_NAME = 'backup_milvus'
+BACKUP_NAME = 'vector_db_backup'
 milvus_backup_yaml_file = '/app/backup_milvus/configs/backup.yaml'
 milvus_backup_exe = '/app/backup_milvus/milvus-backup'
 
