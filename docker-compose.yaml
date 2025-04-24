@@ -37,11 +37,11 @@ services:
     container_name: backend
     build:
       context: .
-      dockerfile: ./DockerFiles/backend/flask.Dockerfile
+      dockerfile: ./DockerFiles/backend/Dockerfile
     env_file:
       - .env
     ports:
-      - "13579:5000"
+      - "80:8501"
     volumes:
       - ./backend:/app
     depends_on:

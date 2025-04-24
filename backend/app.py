@@ -2,136 +2,142 @@ import os
 import requests
 import streamlit as st
 
+# Configurable endpoints
+
 QUERY_API = f"http://{os.getenv('DP_HOST')}:{os.getenv('DP_PORT')}/query"
 LLM_ENDPOINT  = os.getenv('LLM_ENDPOINT')
 
 TOP_K_DEFAULT = 5
-CONFIDENCE_DEFAULT = 0.0
+CONFIDENCE_DEFAULT = 0.5
+LLM_MODEL = "llama3"
 
-# prompt template
-CANNOT_ANSWER_PHRASE = "I cannot answer"
-PROMPT = (
-    f"Answer the question below using the information from the provided context.\n\n"
-    f"Context (with confidence level):\n\n{{context}}\n\n"
-    f"----\n\n"
-    f"Question: {{question}}\n\n"
-    f"Write a concise and well-structured answer in the style of a Wikipedia article.\n"
-    f"Use citation numbers like [1], [2], etc., to indicate which parts of the context support each claim.\n"
-    # f"Do not cite any information that is not explicitly present in the context.\n\n"
-    f"Structure your output as follows:\n\n"
-    f"Answer:\n"
-    f"<Write your answer here, referencing sources with [n]>\n\n"
-    f"References:\n"
-    f"[1] Title: <title_1>\n"
-    f"    Relevance: <relevance_1>\n"
-    f"    Excerpt: <short supporting snippet from the context>\n"
-    f"[2] Title: <title_2>\n"
-    f"    Relevance: <relevance_2>\n"
-    f"    Excerpt: <short supporting snippet from the context>\n"
-    f"...\n\n"
-    f"If the context provides insufficient information, respond with: \"{CANNOT_ANSWER_PHRASE}.\"\n"
-)
+CANNOT_ANSWER_PHRASE = "This question cannot be answered based on the given context."
+
+PROMPT_TEMPLATE = """\
+Your are Assistant, answer the question below with the previous conversations and context.
+
+Previous conversations:
+
+{conversations}
+
+----
+Context (with confidence scores):
+
+{context}
+
+----
+Question: {question}
+
+Write an answer based on the context. If the context provides insufficient information or the question is not a question, such as "hello", "hi", "?", reply "{cannot_answer}" only and do not mention any other thing, including provided references.\n 
+For each part of your answer, indicate which sources most support with [source_indicator] such as [1]. 
+Write in the style of a Wikipedia article, with concise sentences and coherent paragraphs. The context comes from a variety of sources and is only a summary, so there may be inaccuracies or ambiguities. 
+If quotes are present and relevant, use them in the answer. This answer will go directly onto Wikipedia, so do not add any extraneous information.
+
+At the end of your answer, include references you used as the following format exactly:
+
+References:
+
+[1] Title: <title_1>
+    Relevance: <relevance_1>
+    Excerpt: <short supporting snippet from the context>
+
+[2] Title: <title_2>
+    Relevance: <relevance_2>
+    Excerpt: <short supporting snippet from the context>
+
+...
+Each reference **must include** an excerpt from the context that directly supports the corresponding claim.
+If there is no such excerpt, do not include that reference.
+
+Answer:"""
 
 
-def get_prompt(current_query: str, conversation_history=None, *, top_k=TOP_K_DEFAULT, confidence=CONFIDENCE_DEFAULT):
-    """
-    Build an LLM prompt by enriching the user query with vector-DB context.
-    
-    Args:
-        conn: Placeholder for DB conn (if needed).
-        current_query: The user's current question.
-        conversation_history: List of previous chat messages (dicts with 'role' and 'content').
-        top_k: Number of top vector matches to retrieve.
-        confidence: Minimum confidence threshold for retrieval.
-    
-    Returns:
-        A tuple of (filled_prompt, context_block_string)
-    """
-    if conversation_history is None:
-        conversation_history = []
-
-    # 1. Format dialogue history
-    history_text = "\n".join(
-        f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}" for msg in conversation_history
-    )
-    full_query = f"{history_text}\n\nCurrent Query: {current_query}" if history_text else current_query
-
-    # 2. Query vector DB for context
-    try:
-        vect_resp = requests.get(
-            QUERY_API,
-            params={"query": current_query, "top_k": top_k, "confidence_threshold": confidence},
-            timeout=60
-        )
-        vect_resp.raise_for_status()
-        results = vect_resp.json()
-    except Exception as exc:
-        raise RuntimeError(f"Vector-DB request failed → {exc}") from exc
-
-    # 3. Format context block
-    papers_block = ""
-    for idx, paper in enumerate(results, start=1):
+def build_prompt(question: str, context_docs: list, conversation_history: list = None) -> str:
+    context_block = ""
+    for idx, paper in enumerate(context_docs, start=1):
         meta = paper.get("metadata", {})
-        papers_block += (
+        context_block += (
             f"[{idx}] \"{meta.get('title', 'Unknown Title')}\" "
             f"(arXiv:{meta.get('arxiv_id', 'N/A')}, Confidence: {paper.get('confidence', 0.0):.2f})\n"
             f"URL: {meta.get('url', 'N/A')}\n"
             f"Section Content: {paper.get('content', 'N/A')}\n\n"
         )
 
-    # 4. Format final prompt
-    filled_prompt = PROMPT.format(
-        context=papers_block.strip(),
-        question=current_query
+    history_block = ""
+    if conversation_history:
+        for role, msg in conversation_history[-5:-1]:
+            role_name = "User" if role == "user" else "Assistant"
+            history_block += f"{role_name}: {msg}\n"
+        history_block += "\n"
+
+    return PROMPT_TEMPLATE.format(
+        conversations=history_block,
+        context=context_block.strip(),
+        question=question,
+        cannot_answer=CANNOT_ANSWER_PHRASE
     )
 
-    return filled_prompt
 
 
+def query_vector_db(query: str, top_k: int = TOP_K_DEFAULT, confidence: float = CONFIDENCE_DEFAULT) -> list:
+    try:
+        response = requests.get(
+            QUERY_API,
+            params={"query": query, "top_k": top_k, "confidence_threshold": confidence},
+            timeout=60
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to query vector DB: {e}")
 
-# Placeholder for backend integration
-def send_to_llm_backend(user_prompt: str) -> str:
-    """
-    Replace this function with an actual API call to your LLM backend.
-    For example, you could send an HTTP POST request to a FastAPI or Flask endpoint.
-    """
 
-    full_prompt = get_prompt(user_prompt, [])
+def call_llm(prompt: str) -> str:
+    try:
+        response = requests.post(
+            LLM_ENDPOINT,
+            json={"prompt": prompt, "model": LLM_MODEL, "stream": False},
+            timeout=120
+        )
+        response.raise_for_status()
+        return response.json().get("response") or response.text
+    except requests.RequestException as e:
+        raise RuntimeError(f"LLM backend error: {e}")
 
-    llm_resp = requests.post(LLM_ENDPOINT, json={"prompt": full_prompt, "model": "llama3", "stream": False}, timeout=120)
-    llm_resp.raise_for_status()
-    asst_text = llm_resp.json().get("response") or llm_resp.text
 
-    return asst_text
+# Streamlit App Logic
+st.set_page_config(page_title="Paper Q&A")
+st.title("Paper Q&A")
 
-# Initialize session state to store chat history
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Set page title and header
-st.set_page_config(page_title="LLM Chat")
-st.title("LLM Chat Interface")
+# Display history
+for role, msg in st.session_state.chat_history:
+    st.chat_message(role).write(msg)
 
-# Display previous messages from the conversation
-for role, message in st.session_state.chat_history:
-    if role == "user":
-        st.chat_message("user").write(message)
-    else:
-        st.chat_message("assistant").write(message)
+# Input
+if user_input := st.chat_input("Type your question..."):
+    st.chat_message("user").write(user_input)
+    st.session_state.chat_history.append(("user", user_input))
 
-# Input field for the user to type a new message
-if prompt := st.chat_input("Type a message and press Enter..."):
-    # Display user message
-    st.chat_message("user").write(prompt)
-    st.session_state.chat_history.append(("user", prompt))
+    placeholder = st.empty()
+    try:
+        placeholder.info("Retrieving relevant documents...")
+        retrieved_context = query_vector_db(user_input)
 
-    # Call backend function to get LLM response
-    with st.spinner("Waiting for response..."):
-        try:
-            response = send_to_llm_backend(prompt)
-        except Exception as e:
-            response = f"Error from backend: {e}"
+        placeholder.info("Constructing prompt...")
+        prompt = build_prompt(user_input, retrieved_context, st.session_state.chat_history)
 
-    # Display assistant response
-    st.chat_message("assistant").write(response)
-    st.session_state.chat_history.append(("assistant", response))
+        print(prompt)
+
+        placeholder.info("Generating answer...")
+        answer = call_llm(prompt)
+
+    except Exception as e:
+        answer = f"Error: {e}"
+    finally:
+        placeholder.empty()
+
+    st.chat_message("assistant").write(answer)
+    st.session_state.chat_history.append(("assistant", answer))
