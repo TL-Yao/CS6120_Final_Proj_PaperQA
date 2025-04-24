@@ -1,4 +1,4 @@
-# Ask the Paper: An LLM-Based Assistant for Academic Papers
+# Paper Q&A: An LLM-Based Assistant for Academic Papers
 
 ## Live Demo Link
 http://34.122.121.114:80
